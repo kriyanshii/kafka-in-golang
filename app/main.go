@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"net"
 	"os"
 )
@@ -21,9 +23,31 @@ func main() {
 		fmt.Println("Failed to bind to port 9092")
 		os.Exit(1)
 	}
-	_, err = l.Accept()
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
+
+	defer l.Close()
+	fmt.Println("started listening to 9092")
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			fmt.Println("Error accepting connection: ", err.Error())
+			os.Exit(1)
+		}
+		go handleConnection(conn)
+	}
+}
+
+func handleConnection(conn net.Conn) {
+	defer conn.Close()
+	for {
+		received := bytes.Buffer{}
+		buff := make([]byte, 1024)
+
+		_, err := conn.Read(buff)
+		if err != nil && err == io.EOF {
+			break
+		}
+		received.Write(buff)
+
+		conn.Write([]byte{0, 0, 0, 0, 0, 0, 0, 7})
 	}
 }
