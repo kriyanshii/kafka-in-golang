@@ -8,8 +8,6 @@ and responding to APIVersions & Fetch API requests. You'll also learn about
 encoding and decoding messages using the Kafka wire protocol. You'll also learn
 about handling the network protocol, event loops, TCP sockets and more.
 
-**Note**: If you're viewing this repo on GitHub, head over to
-[codecrafters.io](https://codecrafters.io) to try the challenge.
 
 # Passing the first stage
 

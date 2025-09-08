@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"net"
@@ -39,15 +39,71 @@ func main() {
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 	for {
-		received := bytes.Buffer{}
-		buff := make([]byte, 1024)
-
-		_, err := conn.Read(buff)
-		if err != nil && err == io.EOF {
+		// Read the message size (4 bytes)
+		messageSizeBytes := make([]byte, 4)
+		_, err := io.ReadFull(conn, messageSizeBytes)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			fmt.Printf("Error reading message size: %v\n", err)
 			break
 		}
-		received.Write(buff)
 
-		conn.Write([]byte{0, 0, 0, 0, 0, 0, 0, 7})
+		// Parse message size (big-endian)
+		messageSize := binary.BigEndian.Uint32(messageSizeBytes)
+		fmt.Printf("Message size: %d\n", messageSize)
+
+		// Read the rest of the message
+		messageBytes := make([]byte, messageSize)
+		_, err = io.ReadFull(conn, messageBytes)
+		if err != nil {
+			fmt.Printf("Error reading message body: %v\n", err)
+			break
+		}
+
+		// Parse request header v2
+		correlationID, err := parseRequestHeaderV2(messageBytes)
+		if err != nil {
+			fmt.Printf("Error parsing request header: %v\n", err)
+			break
+		}
+
+		fmt.Printf("Correlation ID: %d\n", correlationID)
+
+		// Build response: message_size (4 bytes) + correlation_id (4 bytes)
+		response := make([]byte, 8)
+		// message_size = 4 (for the correlation_id field)
+		binary.BigEndian.PutUint32(response[0:4], 4)
+		// correlation_id
+		binary.BigEndian.PutUint32(response[4:8], correlationID)
+
+		_, err = conn.Write(response)
+		if err != nil {
+			fmt.Printf("Error writing response: %v\n", err)
+			break
+		}
+
+		// Close connection after sending response for this stage
+		break
 	}
+}
+
+// parseRequestHeaderV2 parses a Kafka request header v2 and returns the correlation_id
+// Request header v2 structure:
+// - request_api_key (INT16, 2 bytes)
+// - request_api_version (INT16, 2 bytes)
+// - correlation_id (INT32, 4 bytes)
+// - client_id (NULLABLE_STRING, variable length)
+// - TAG_BUFFER (COMPACT_ARRAY, variable length)
+func parseRequestHeaderV2(data []byte) (uint32, error) {
+	if len(data) < 8 {
+		return 0, fmt.Errorf("insufficient data for request header v2")
+	}
+
+	// Skip request_api_key (2 bytes) and request_api_version (2 bytes)
+	// correlation_id starts at offset 4
+	correlationID := binary.BigEndian.Uint32(data[4:8])
+
+	return correlationID, nil
 }
