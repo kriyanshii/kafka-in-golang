@@ -17,7 +17,7 @@ const ApiVersionsAPIKey = 18
 
 // Error codes
 const (
-	ErrorCodeNone              = 0
+	ErrorCodeNone               = 0
 	ErrorCodeUnsupportedVersion = 35
 )
 
@@ -111,13 +111,13 @@ func handleApiVersions(correlationID uint32, apiVersion int16) []byte {
 	// - correlation_id (4 bytes)
 	// - error_code (2 bytes)
 	response := make([]byte, 10)
-	
+
 	// message_size = 6 (for correlation_id + error_code)
 	binary.BigEndian.PutUint32(response[0:4], 6)
 	// correlation_id
 	binary.BigEndian.PutUint32(response[4:8], correlationID)
 	// error_code
-	binary.BigEndian.PutInt16(response[8:10], errorCode)
+	binary.BigEndian.PutUint16(response[8:10], uint16(errorCode))
 
 	return response
 }
