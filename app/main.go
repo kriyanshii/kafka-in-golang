@@ -12,6 +12,15 @@ import (
 var _ = net.Listen
 var _ = os.Exit
 
+// ApiVersions API key is 18
+const ApiVersionsAPIKey = 18
+
+// Error codes
+const (
+	ErrorCodeNone              = 0
+	ErrorCodeUnsupportedVersion = 35
+)
+
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
@@ -63,20 +72,16 @@ func handleConnection(conn net.Conn) {
 		}
 
 		// Parse request header v2
-		correlationID, err := parseRequestHeaderV2(messageBytes)
+		correlationID, apiVersion, err := parseRequestHeaderV2(messageBytes)
 		if err != nil {
 			fmt.Printf("Error parsing request header: %v\n", err)
 			break
 		}
 
-		fmt.Printf("Correlation ID: %d\n", correlationID)
+		fmt.Printf("Correlation ID: %d, API Version: %d\n", correlationID, apiVersion)
 
-		// Build response: message_size (4 bytes) + correlation_id (4 bytes)
-		response := make([]byte, 8)
-		// message_size = 4 (for the correlation_id field)
-		binary.BigEndian.PutUint32(response[0:4], 4)
-		// correlation_id
-		binary.BigEndian.PutUint32(response[4:8], correlationID)
+		// Handle ApiVersions API
+		response := handleApiVersions(correlationID, apiVersion)
 
 		_, err = conn.Write(response)
 		if err != nil {
@@ -89,21 +94,50 @@ func handleConnection(conn net.Conn) {
 	}
 }
 
-// parseRequestHeaderV2 parses a Kafka request header v2 and returns the correlation_id
+// handleApiVersions handles the ApiVersions API request
+func handleApiVersions(correlationID uint32, apiVersion int16) []byte {
+	// Check if the requested version is supported (0-4)
+	var errorCode int16
+	if apiVersion < 0 || apiVersion > 4 {
+		errorCode = ErrorCodeUnsupportedVersion
+		fmt.Printf("Unsupported API version: %d\n", apiVersion)
+	} else {
+		errorCode = ErrorCodeNone
+		fmt.Printf("Supported API version: %d\n", apiVersion)
+	}
+
+	// Build ApiVersions response:
+	// - message_size (4 bytes) - for now, any value works as per notes
+	// - correlation_id (4 bytes)
+	// - error_code (2 bytes)
+	response := make([]byte, 10)
+	
+	// message_size = 6 (for correlation_id + error_code)
+	binary.BigEndian.PutUint32(response[0:4], 6)
+	// correlation_id
+	binary.BigEndian.PutUint32(response[4:8], correlationID)
+	// error_code
+	binary.BigEndian.PutInt16(response[8:10], errorCode)
+
+	return response
+}
+
+// parseRequestHeaderV2 parses a Kafka request header v2 and returns the correlation_id and api_version
 // Request header v2 structure:
 // - request_api_key (INT16, 2 bytes)
 // - request_api_version (INT16, 2 bytes)
 // - correlation_id (INT32, 4 bytes)
 // - client_id (NULLABLE_STRING, variable length)
 // - TAG_BUFFER (COMPACT_ARRAY, variable length)
-func parseRequestHeaderV2(data []byte) (uint32, error) {
+func parseRequestHeaderV2(data []byte) (uint32, int16, error) {
 	if len(data) < 8 {
-		return 0, fmt.Errorf("insufficient data for request header v2")
+		return 0, 0, fmt.Errorf("insufficient data for request header v2")
 	}
 
-	// Skip request_api_key (2 bytes) and request_api_version (2 bytes)
-	// correlation_id starts at offset 4
+	// Parse request_api_version (2 bytes, starting at offset 2)
+	apiVersion := binary.BigEndian.Uint16(data[2:4])
+	// Parse correlation_id (4 bytes, starting at offset 4)
 	correlationID := binary.BigEndian.Uint32(data[4:8])
 
-	return correlationID, nil
+	return correlationID, int16(apiVersion), nil
 }
