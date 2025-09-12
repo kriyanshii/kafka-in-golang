@@ -97,29 +97,28 @@ func handleConnection(conn net.Conn) {
 // handleApiVersions handles the ApiVersions API request
 func handleApiVersions(correlationID uint32, apiVersion int16) []byte {
 	// Check if the requested version is supported (0-4)
-	var errorCode int16
-	if apiVersion < 0 || apiVersion > 4 {
-		errorCode = ErrorCodeUnsupportedVersion
+	errorCode := 0
+	if apiVersion > 4 {
+		errorCode = 35
 		fmt.Printf("Unsupported API version: %d\n", apiVersion)
 	} else {
-		errorCode = ErrorCodeNone
 		fmt.Printf("Supported API version: %d\n", apiVersion)
 	}
 
-	// Build ApiVersions response:
-	// - message_size (4 bytes) - for now, any value works as per notes
-	// - correlation_id (4 bytes)
-	// - error_code (2 bytes)
-	response := make([]byte, 10)
+	// Build fixed 23-byte response as specified
+	response := [23]byte{
+		0, 0, 0, 19, // message_size (19 bytes)
+		byte(correlationID >> 24), byte(correlationID >> 16), byte(correlationID >> 8), byte(correlationID), // correlation_id
+		0, byte(errorCode), // error_code
+		2, 0, // api_versions array length (2)
+		18, 0, 0, 0, 4, // api_versions entry: api_key=18, min_version=0, max_version=4
+		0, 0, 0, 0, // throttle_time_ms
+		0, 0, // tagged_fields
+	}
 
-	// message_size = 6 (for correlation_id + error_code)
-	binary.BigEndian.PutUint32(response[0:4], 6)
-	// correlation_id
-	binary.BigEndian.PutUint32(response[4:8], correlationID)
-	// error_code
-	binary.BigEndian.PutUint16(response[8:10], uint16(errorCode))
+	fmt.Printf("Response message size: 19, body size: 19\n")
 
-	return response
+	return response[:]
 }
 
 // parseRequestHeaderV2 parses a Kafka request header v2 and returns the correlation_id and api_version
