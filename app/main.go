@@ -98,7 +98,7 @@ func handleConnection(conn net.Conn) {
 func handleApiVersions(correlationID uint32, apiVersion int16) []byte {
 	// Check if the requested version is supported (0-4)
 	errorCode := 0
-	if apiVersion > 4 {
+	if apiVersion < 0 || apiVersion > 4 {
 		errorCode = 35
 		fmt.Printf("Unsupported API version: %d\n", apiVersion)
 	} else {
