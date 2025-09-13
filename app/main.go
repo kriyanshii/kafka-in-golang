@@ -89,8 +89,8 @@ func handleConnection(conn net.Conn) {
 			break
 		}
 
-		// Close connection after sending response for this stage
-		break
+		// Remove the break statement to allow multiple sequential requests
+		// The loop will continue to read the next request from the same client
 	}
 }
 
